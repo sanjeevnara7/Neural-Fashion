@@ -83,7 +83,7 @@ def classifier_loss(outputs, targets):
     loss_out = []
     for index, output in enumerate(outputs):
         loss_out.append(torch.nn.CrossEntropyLoss(output, targets[:,index]))
-    return torch.tensor(loss_out)
+    return torch.sum(torch.tensor(loss_out))
 
 #Utility method to get predictions
 def classifier_preds(outputs, shape):
