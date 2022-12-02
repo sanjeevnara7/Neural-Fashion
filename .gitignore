@@ -1,0 +1,9 @@
+**__pycache__
+baseline_encoder.py
+baseline_decoder.py
+baseline_info.txt
+captions.json
+count_vocab.py
+model_info.txt
+test_images_fashion.txt
+verify_model.py
