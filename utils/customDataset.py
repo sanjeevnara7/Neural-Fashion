@@ -14,30 +14,20 @@ import cv2
 
 #Define Custom Dataset Class
 class FashionDataset(Dataset):
-    def __init__(self, shape_file, fabric_file, pattern_file, root_dir, mode='train'):
+    def __init__(self, data_np, root_dir, mode='train'):
         super().__init__()
-        self.shape_annotations = pd.read_csv(shape_file, sep=' ')
-        self.fabric_annotations = pd.read_csv(fabric_file, sep=' ')
-        self.pattern_annotations = pd.read_csv(pattern_file, sep=' ')
-
+        self.data_np = data_np
         self.root_dir = root_dir
         self.mode = mode
     
     def __len__(self):
-        return len(self.shape_annotations)
+        return len(self.data_np)
 
     def __getitem__(self, idx):
-        path = os.path.join(self.root_dir, self.shape_annotations.iloc[idx, 0])
+        path = os.path.join(self.root_dir, self.data_np[idx, 0])
         img = cv2.imread(path, cv2.IMREAD_UNCHANGED)
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)    #convert image from BGR to RGB format
-
-        shape_tensor = torch.tensor(self.shape_annotations.iloc[idx, 1:])
-        fabric_tensor = torch.tensor(self.fabric_annotations.iloc[idx, 1:])
-        pattern_tensor = torch.tensor(self.pattern_annotations.iloc[idx, 1:])
-
-        y1 = torch.cat((shape_tensor, fabric_tensor, pattern_tensor))
-        
-        start_time = time.time()
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB) #convert image from BGR to RGB format
+        y1 = torch.from_numpy(self.data_np[idx, 1:].astype('float32'))
         apply_transform = self.transform_data()
         image = apply_transform(image = img)['image']
         return image, y1

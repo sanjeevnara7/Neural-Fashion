@@ -3,7 +3,7 @@ import torch
 import copy
 from tqdm import tqdm
 from time import sleep
-#from .logger import DataLogger
+from torch.utils.tensorboard import SummaryWriter
 import time
 
 #Training Function
@@ -26,7 +26,7 @@ def fit_classifier(model, train_loader, val_loader, optimizer, loss_func, attrib
     
     '''
     
-    model = model.to(device)
+    model = model.to(device, non_blocking=True)
     
     train_loss_history = []
     train_acc_history = []
@@ -35,10 +35,10 @@ def fit_classifier(model, train_loader, val_loader, optimizer, loss_func, attrib
     best_acc = 0.
     
     #create the logger object
-    #logger = DataLogger(model_name = 'Classifier')
-    #logger.visualize_logged_data()
+    writer = SummaryWriter()
     
     #Iterate epochs
+    train_itrs = 0
     for epoch in range(epochs):
         epoch_start_time = time.time()
         #Each epoch has a training phase and validation phase
@@ -54,22 +54,20 @@ def fit_classifier(model, train_loader, val_loader, optimizer, loss_func, attrib
                 data_loader = val_loader
 
             running_loss = 0.
-            running_corrects = torch.tensor([0.]).to(device)
+            running_corrects = torch.tensor([0.]).to(device, non_blocking=True)
             with tqdm(data_loader, unit="batch") as tepoch:
                 #Iterate batches
-                seen_so_far = 0
                 for itr, (inputs, labels) in enumerate(tepoch):
-                    seen_so_far += inputs.shape[0]
+                    if phase == 'train':
+                        train_itrs += 1
                     tepoch.set_description(f"Epoch {(epoch+1)} {phase}")
-                    #logger.log_images(inputs, e*len(data_loader) + itr, mode = phase)
-                    inputs = inputs.to(device)
-                    labels = labels.long().to(device)
+                    inputs = inputs.to(device, non_blocking=True)
+                    labels = labels.long().to(device, non_blocking=True)
                     optimizer.zero_grad()
                     #Set gradient calc on only for training phase
                     with torch.set_grad_enabled(phase == 'train'):
                         outputs = model(inputs)
                         loss = classifier_loss(outputs, labels, loss_func, attributes)
-                        #logger_info.log_loss_accuracy(loss, torch.sum(preds == labels)/inputs.shape[0], itr)
                         preds = classifier_preds(outputs, shape=(inputs.shape[0],labels.shape[1]), device=device)
                         #Do backprop if phase = train
                         if phase == 'train':
@@ -77,27 +75,35 @@ def fit_classifier(model, train_loader, val_loader, optimizer, loss_func, attrib
                             optimizer.step()
                     running_loss += loss.item() * inputs.size(0)
                     running_corrects += torch.sum(preds == labels)
-                    tepoch.set_postfix(loss=loss.item(), accuracy=(running_corrects/seen_so_far).item())
+                    writer.add_scalar("Loss/"+phase,
+                                      loss.item(),
+                                      train_itrs)
+                    writer.add_scalar("Accuracy/"+phase,
+                                      (torch.sum(preds == labels)/(inputs.shape[0] * labels.shape[1])).item(),
+                                      train_itrs)
+                    tepoch.set_postfix(loss=loss.item(),
+                                       accuracy=(torch.sum(preds == labels)/(inputs.shape[0] * labels.shape[1])).item())
                 epoch_loss = running_loss / len(data_loader.dataset)
-                epoch_acc = running_corrects.float() / len(data_loader.dataset)
-                tepoch.set_description(f"Epoch {(epoch+1)} {phase} loss: {epoch_loss} {phase} accuracy: {epoch_acc}")
+                epoch_acc = running_corrects.float() / (len(data_loader.dataset) * labels.shape[1])
+                print(f"Epoch {(epoch+1)} {phase} loss: {epoch_loss} {phase} accuracy: {epoch_acc.item()}")
 
                 if phase == 'val':
                     val_loss_history.append(epoch_loss)
-                    val_acc_history.append(epoch_acc)
+                    val_acc_history.append(epoch_acc.item())
                 else:
                     train_loss_history.append(epoch_loss)
-                    train_acc_history.append(epoch_acc)
+                    train_acc_history.append(epoch_acc.item())
                 
-                #Saving best model
+                #Saving best model (not used)
                 if phase == 'val' and epoch_acc > best_acc:
                     best_acc = epoch_acc
-                    best_model_wts = copy.deepcopy(model.state_dict())
+                    #best_model_wts = copy.deepcopy(model.state_dict())
                 
         print('-'*20)
         epoch_end_time = time.time()
-    
-    print('Best val acc: {}'.format(best_acc))
+    #End of Training    
+    writer.flush()
+    print('Best val acc: {}'.format(best_acc.item()))
     print(f"Time taken for an epoch: {epoch_end_time - epoch_start_time}")
     return (train_loss_history, train_acc_history, val_loss_history, val_acc_history)
 
@@ -125,7 +131,7 @@ def classifier_preds(outputs, shape, device):
         outputs - a list of outputs where each output corresponds to a vector of predictions
         shape - shape of the predictions to return
     '''
-    preds = torch.empty(size=shape).to(device)
+    preds = torch.empty(size=shape).to(device, non_blocking=True)
     for index, output in enumerate(outputs):
         preds[:,index] = torch.argmax(output, dim=1)
     return preds
