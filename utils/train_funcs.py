@@ -1,5 +1,6 @@
 # Will contain utility functions used for training the model(s)
 import torch
+import os
 import copy
 from tqdm import tqdm
 from time import sleep
@@ -7,7 +8,7 @@ from torch.utils.tensorboard import SummaryWriter
 import time
 
 #Training Function
-def fit_classifier(model, train_loader, val_loader, optimizer, loss_func, attributes, epochs=10, device='cpu'):
+def fit_classifier(model, train_loader, val_loader, optimizer, loss_func, attributes, epochs=10, initial_epoch=0, device='cpu', name='transformer'):
     '''
     fit() function to train a classifier model.
 
@@ -38,8 +39,7 @@ def fit_classifier(model, train_loader, val_loader, optimizer, loss_func, attrib
     writer = SummaryWriter()
     
     #Iterate epochs
-    train_itrs = 0
-    for epoch in range(epochs):
+    for epoch in range(initial_epoch, initial_epoch+epochs):
         epoch_start_time = time.time()
         #Each epoch has a training phase and validation phase
         for phase in ['train','val']:
@@ -58,12 +58,11 @@ def fit_classifier(model, train_loader, val_loader, optimizer, loss_func, attrib
             with tqdm(data_loader, unit="batch") as tepoch:
                 #Iterate batches
                 for itr, (inputs, labels) in enumerate(tepoch):
-                    if phase == 'train':
-                        train_itrs += 1
                     tepoch.set_description(f"Epoch {(epoch+1)} {phase}")
                     inputs = inputs.to(device, non_blocking=True)
                     labels = labels.long().to(device, non_blocking=True)
                     optimizer.zero_grad()
+                    
                     #Set gradient calc on only for training phase
                     with torch.set_grad_enabled(phase == 'train'):
                         outputs = model(inputs)
@@ -73,19 +72,26 @@ def fit_classifier(model, train_loader, val_loader, optimizer, loss_func, attrib
                         if phase == 'train':
                             loss.backward()
                             optimizer.step()
+                    
                     running_loss += loss.item() * inputs.size(0)
                     running_corrects += torch.sum(preds == labels)
-                    writer.add_scalar("Loss/"+phase,
-                                      loss.item(),
-                                      train_itrs)
-                    writer.add_scalar("Accuracy/"+phase,
-                                      (torch.sum(preds == labels)/(inputs.shape[0] * labels.shape[1])).item(),
-                                      train_itrs)
+                    
+                    if phase == 'train':
+                        writer.add_scalar("Loss/"+phase, loss.item(), epoch * len(data_loader) + itr)
+                        writer.add_scalar("Accuracy/"+phase,
+                                          (torch.sum(preds == labels)/(inputs.shape[0] * labels.shape[1])).item(),
+                                          epoch * len(data_loader) + itr)
+                    
                     tepoch.set_postfix(loss=loss.item(),
                                        accuracy=(torch.sum(preds == labels)/(inputs.shape[0] * labels.shape[1])).item())
+                
                 epoch_loss = running_loss / len(data_loader.dataset)
                 epoch_acc = running_corrects.float() / (len(data_loader.dataset) * labels.shape[1])
                 print(f"Epoch {(epoch+1)} {phase} loss: {epoch_loss} {phase} accuracy: {epoch_acc.item()}")
+                
+                if phase == 'val':
+                    writer.add_scalar("Loss/"+phase, epoch_loss, epoch+1)
+                    writer.add_scalar("Accuracy/"+phase, epoch_acc, epoch+1)
 
                 if phase == 'val':
                     val_loss_history.append(epoch_loss)
@@ -94,15 +100,20 @@ def fit_classifier(model, train_loader, val_loader, optimizer, loss_func, attrib
                     train_loss_history.append(epoch_loss)
                     train_acc_history.append(epoch_acc.item())
                 
-                #Saving best model (not used)
+                #Saving best model
                 if phase == 'val' and epoch_acc > best_acc:
                     best_acc = epoch_acc
+                    os.makedirs('./models', exist_ok = True)
+                    torch.save({      
+                        'epoch': epoch,
+                        'model_state_dict': model.state_dict(),
+                    }, f"./models/{name}_attribute_model.pth")
                     #best_model_wts = copy.deepcopy(model.state_dict())
                 
         print('-'*20)
         epoch_end_time = time.time()
     #End of Training    
-    writer.flush()
+    writer.close()
     print('Best val acc: {}'.format(best_acc.item()))
     print(f"Time taken for an epoch: {epoch_end_time - epoch_start_time}")
     return (train_loss_history, train_acc_history, val_loss_history, val_acc_history)
