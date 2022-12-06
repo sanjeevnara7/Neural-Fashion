@@ -174,10 +174,10 @@ def train(model, train_loader, val_loader, vocab, optimizer, criterion, epochs=5
     model = model.to(device, non_blocking=True)
     
     train_loss_history = []
-    train_acc_history = []
+    train_bleu_history = []
     val_loss_history = []
-    val_acc_history = []
-    best_acc = 0.
+    val_bleu_history = []
+    best_bleu = 0.
     
     # Create the logger object
     writer = SummaryWriter()
@@ -242,28 +242,27 @@ def train(model, train_loader, val_loader, vocab, optimizer, criterion, epochs=5
 
                 if phase == 'val':
                     val_loss_history.append(epoch_loss)
-                    val_acc_history.append(epoc_bleu.item())
+                    val_bleu_history.append(epoc_bleu.item())
                 else:
                     train_loss_history.append(epoch_loss)
-                    train_acc_history.append(epoc_bleu.item())
+                    train_bleu_history.append(epoc_bleu.item())
                 
                 #Saving best model
                 if phase == 'val' and epoc_bleu > best_bleu:
-                    best_acc = epoch_acc
+                    best_bleu = epoc_bleu
                     os.makedirs('./models', exist_ok = True)
                     torch.save({      
                         'epoch': epoch,
                         'model_state_dict': model.state_dict(),
                     }, f"./models/{name}_attribute_model.pth")
-                    #best_model_wts = copy.deepcopy(model.state_dict())
                 
         print('-'*20)
         epoch_end_time = time.time()
     #End of Training    
     writer.close()
-    print('Best val acc: {}'.format(best_acc.item()))
+    print('Best BLEU Score: {}'.format(best_bleu.item()))
     print(f"Time taken for an epoch: {epoch_end_time - epoch_start_time}")
-    return (train_loss_history, train_acc_history, val_loss_history, val_acc_history)
+    return (train_loss_history, train_bleu_history, val_loss_history, val_bleu_history)
 
 
 #Loss function for classifier
@@ -295,8 +294,8 @@ def get_predictions(outputs, shape, device):
         shape - shape of the predictions to return
     '''
     preds = torch.empty(size=shape).to(device, non_blocking=True)
-    for index, output in enumerate(outputs):
-        preds[:,index] = torch.argmax(output, dim=1)
+    for i in range(outputs.shape[1]):
+        preds[:,i] = torch.argmax(outputs[:, i, :], dim=-1)
     return preds
 
 
