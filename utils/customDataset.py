@@ -9,28 +9,34 @@ import time
 
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
-
 import cv2
+import tensorflow as tf
 
 #Define Custom Dataset Class
 class FashionDataset(Dataset):
-    def __init__(self, data_np, root_dir, mode='train'):
+    def __init__(self, data_np, captions, tokenizer, root_dir, mode='train'):
         super().__init__()
         self.data_np = data_np
         self.root_dir = root_dir
         self.mode = mode
+        self.captions = captions
+        self.tokenizer = tokenizer
     
     def __len__(self):
         return len(self.data_np)
 
     def __getitem__(self, idx):
-        path = os.path.join(self.root_dir, self.data_np[idx, 0])
+        filename = self.data_np[idx, 0]
+        path = os.path.join(self.root_dir, filename)
         img = cv2.imread(path, cv2.IMREAD_UNCHANGED)
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB) #convert image from BGR to RGB format
         y1 = torch.from_numpy(self.data_np[idx, 1:].astype('float32'))
         apply_transform = self.transform_data()
         image = apply_transform(image = img)['image']
-        return image, y1
+        
+        y2 = self.captions.loc[filename]
+        y2 = torch.tensor(y2['sequence'])
+        return image, y1, y2
     
     #Function to apply transforms
     def transform_data(self):

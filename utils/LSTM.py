@@ -1,3 +1,6 @@
+import torch 
+import torch.nn as nn
+
 
 class DecoderLSTM(nn.Module):
     def __init__(self, embed_size = 512, hidden_size = 512, vocab_size = 107, num_layers=3):
@@ -15,9 +18,9 @@ class DecoderLSTM(nn.Module):
         self.out = nn.Linear(self.hidden_size, self.vocab_size)
         
         
-        #self.embed.weight.data.uniform_(-0.1, 0.1)
-        #self.linear.weight.data.uniform_(-0.1, 0.1)
-        #self.linear.bias.data.fill_(0)
+        self.embed.weight.data.uniform_(-0.1, 0.1)
+        self.linear.weight.data.uniform_(-0.1, 0.1)
+        self.linear.bias.data.fill_(0)
     
     # Forward function
     def forward(self, features, captions):
@@ -27,7 +30,7 @@ class DecoderLSTM(nn.Module):
         features = self.linear1(features)
         
         # Concatenate features and embeddings along the columns  
-        embeddings = torch.cat((features, embeddings), dim = -1)
+        embeddings = torch.cat((features, embeddings[:, :-1, :]), dim = -1)
         
         hidden_out, _ = self.lstm(embeddings)
         outputs = self.out(hidden_out)
