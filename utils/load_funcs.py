@@ -13,12 +13,14 @@ def get_data_loaders():
     captions = pd.read_json('./labels/captions.json', typ='series').to_frame()
     data_iter = data_yield(captions)
     #Fit tokenizer
-    tokenizer = tf.keras.preprocessing.text.Tokenizer(oov_token='<unk>', filters='!"#$%&()*+-/:;=?@[\\]^_`{|}~\t\n')
+    tokenizer = tf.keras.preprocessing.text.Tokenizer(oov_token='unk', filters='!"#$%&()*+-/:;=?@[\\]^_`{|}~\t\n')
     tokenizer.fit_on_texts(data_iter)
-    sequences = tokenizer.texts_to_sequences(captions[0].to_list())
-    sequences = pad_sequences(sequences, padding='post')
+    #Re-initialize generator
+    data_iter = data_yield(captions)
+    sequences = tokenizer.texts_to_sequences(list(data_iter))
+    sequences = pad_sequences(sequences, padding='post', value=1)
+    sequences = sequences - 1
     captions['sequence'] = sequences.tolist()
-
     #Read Numpy data
     train_data = np.load('./labels/train_data.npy', allow_pickle=True)
     val_data = np.load('./labels/validation_data.npy', allow_pickle=True)
@@ -38,7 +40,7 @@ def get_data_loaders():
         tokenizer=tokenizer
     )
     
-    train_loader = DataLoader(dataset = train_dataset, batch_size = 64, shuffle = True, num_workers=8, pin_memory=True)
+    train_loader = DataLoader(dataset = train_dataset, batch_size = 64, shuffle = True)
     val_loader = DataLoader(dataset = val_dataset, batch_size = 64, shuffle = False)
     
     return train_loader, val_loader
@@ -59,10 +61,11 @@ def preprocess_sentence(w):
 
     # adding a start and an end token to the sentence
     # so that the model know when to start and stop predicting.
-    w = '<sos> ' + w + ' <eos>'
+    w = 'sos ' + w + ' eos'
     return w
 
 #Generator for sentences
 def data_yield(data):
     for index,row in data.iterrows():
-        yield preprocess_sentence(row[0])
+        w = preprocess_sentence(row[0])
+        yield w

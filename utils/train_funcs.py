@@ -6,7 +6,7 @@ from tqdm import tqdm
 from time import sleep
 from torch.utils.tensorboard import SummaryWriter
 import time
-from nltk.translate.bleu_score import sentence_bleu
+from utils.BLEU import compute_bleu
 
 #Training Function
 def fit_classifier(model, train_loader, val_loader, optimizer, loss_func, attributes, epochs=10, initial_epoch=0, device='cpu', name='transformer'):
@@ -152,9 +152,9 @@ def classifier_preds(outputs, shape, device):
 
 
 #Training Function for decoder
-def train(model, train_loader, val_loader, vocab, optimizer, criterion, epochs=5, device='cpu'):
+def fit(model, train_loader, val_loader, vocab, optimizer, criterion, epochs=5, device='cpu', name='decoder'):
     '''
-    fit() function to train a classifier model.
+    fit() function to train captioning model.
 
     args:
         model - the model to be trained
@@ -198,7 +198,7 @@ def train(model, train_loader, val_loader, vocab, optimizer, criterion, epochs=5
                 data_loader = val_loader
 
             running_loss = 0.
-            runnning_bleu_scores = torch.tensor([0.]).to(device, non_blocking=True)
+            running_bleu_scores = torch.tensor([0.]).to(device, non_blocking=True)
             with tqdm(data_loader, unit="batch") as tepoch:
                 # Iterate batches
                 for itr, (inputs, labels, captions) in enumerate(tepoch):
@@ -212,7 +212,9 @@ def train(model, train_loader, val_loader, vocab, optimizer, criterion, epochs=5
                     with torch.set_grad_enabled(phase == 'train'):
                         outputs = model(inputs, captions, phase)
                         loss = decoder_loss(outputs, captions, criterion, vocab)
-                        preds = get_predictions(outputs, shape=(inputs.shape[0],captions.shape[2]), device=device)
+                        preds = get_predictions(outputs, shape=(inputs.shape[0],outputs.shape[1]), device=device)
+                        #loss = torch.tensor([0.])
+                        #preds = torch.zeros((outputs.shape))
                         # Do backprop if phase = train
                         if phase == 'train':
                             loss.backward()
@@ -220,9 +222,21 @@ def train(model, train_loader, val_loader, vocab, optimizer, criterion, epochs=5
                     
                     running_loss += loss.item() * inputs.size(0)
                     bleu_scores = torch.tensor([0.]).to(device, non_blocking=True)
-                    for idx in range(captions.shape(0)):
-                        bleu_scores += sentence_bleu(preds[idx], captions[idx])
-                       
+                    for idx in range(captions.shape[0]):
+                        w1, w2 = seq2text(preds[idx], captions[idx], vocab)
+                        #print('Pred: ', w1)
+                        #print('Caption: ', w2)
+                        #print('*'*15)
+                        score = compute_bleu([[w2]], [w1])
+                        #print('Score: ',score)
+                        bleu_scores += score[0]
+                    
+#                     if itr % 50 == 0:
+#                         w1, w2 = seq2text(preds[0], captions[0], vocab)
+#                         score = compute_bleu([[w2]], [w1])
+#                         desc = '\n Pred: '+str(w1)+'\n Caption: '+str(w2)+' '+str(score)
+#                         print(desc)
+                        
                     if phase == 'train':
                         writer.add_scalar("Loss/"+phase, loss.item(), epoch * len(data_loader) + itr)
                         writer.add_scalar("BLEU score/"+phase,
@@ -254,7 +268,7 @@ def train(model, train_loader, val_loader, vocab, optimizer, criterion, epochs=5
                     torch.save({      
                         'epoch': epoch,
                         'model_state_dict': model.state_dict(),
-                    }, f"./models/{name}_attribute_model.pth")
+                    }, f"./models/{name}_model.pth")
                 
         print('-'*20)
         epoch_end_time = time.time()
@@ -265,26 +279,26 @@ def train(model, train_loader, val_loader, vocab, optimizer, criterion, epochs=5
     return (train_loss_history, train_bleu_history, val_loss_history, val_bleu_history)
 
 
-#Loss function for classifier
+#Loss function for decoder
 def decoder_loss(outputs, captions, criterion, vocab):
     '''
     Loss function that calculates cross-entropy over each predicted output word and sums it.
 
     args:
-        outputs - a list of outputs where each output corresponds to a vector of predictions
+        outputs - a tensor of outputs where each output corresponds to a vector of predictions
         captions - a tensor of ground truth caption
 
     '''
-    loss_out = torch.empty((outputs.shape(1)))
-    for idx in range(outputs.shape(1)):
-        loss_out[idx] = criterion(output[idx], caption[idx])
-        
-        # stop calculating loss when caption reaches eos
-        if(caption[idx] == vocab['<eos>']):
-            break 
-    return torch.sum(loss_out)
+    loss_out = torch.tensor([0.]).cuda()
+    for i in range(outputs.shape[0]):
+        for j in range(outputs.shape[1]):
+            loss_out += criterion(outputs[i, j], captions[i, j+1]) #Current word pred = next word in ground truth
+            # stop calculating loss when caption reaches eos
+            if(captions[i, j+1] == vocab['eos']):
+                break 
+    return loss_out/outputs.shape[0]
 
-# Utility function to get predictions
+#Utility function to get predictions
 def get_predictions(outputs, shape, device):
     '''
     Utility function that returns predictions for a list of outputs
@@ -297,7 +311,35 @@ def get_predictions(outputs, shape, device):
     for i in range(outputs.shape[1]):
         preds[:,i] = torch.argmax(outputs[:, i, :], dim=-1)
     return preds
-
+    
+#Utility function to convert to sentences
+def seq2text(pred, caption, vocab):
+    rev_vocab = {v: k for k, v in vocab.items()}
+    
+    #Truncate to first <eos> token
+#     for i in range(pred.shape[0]):
+#         if pred[i] == vocab['eos']:
+#             pred = pred[:i]
+#             break
+    for i in range(caption.shape[0]):
+        if caption[i] == vocab['eos']:
+            caption = caption[:i+1]
+            break
+    #print(pred, caption, pred.shape, caption.shape)
+    #Build Strings
+    
+    w1, w2 = [], []
+    for i in range(pred.shape[0]):
+        #print("Pred shape: ", pred.shape)
+        word = rev_vocab[pred[i].int().item()]
+        w1.append(word)
+    
+    for i in range(1, caption.shape[0]):
+        word = rev_vocab[caption[i].int().item()]
+        w2.append(word)
+        
+    return w1, w2
+    
 
 
 
