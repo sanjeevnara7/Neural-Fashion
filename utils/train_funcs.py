@@ -248,7 +248,7 @@ def fit(model, train_loader, val_loader, vocab, optimizer, criterion, epochs=5, 
                 
                 epoch_loss = running_loss / len(data_loader.dataset)
                 epoc_bleu = running_bleu_scores / len(data_loader)
-                print(f"Epoch {(epoch+1)} {phase} loss: {epoch_loss} {phase} accuracy: {epoch_acc.item()}")
+                print(f"Epoch {(epoch+1)} {phase} loss: {epoch_loss} {phase} BLEU: {epoc_bleu.item()}")
                 
                 if phase == 'val':
                     writer.add_scalar("Loss/"+phase, epoch_loss, epoch+1)
