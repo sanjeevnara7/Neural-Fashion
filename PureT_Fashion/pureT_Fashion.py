@@ -23,7 +23,7 @@ class PureT_Fashion(BasicModel):
         super(PureT_Fashion, self).__init__()
         
         # need to check this once
-        self.vocab_size =  109 + 1 #cfg.MODEL.VOCAB_SIZE + 1
+        self.vocab_size =  109 #cfg.MODEL.VOCAB_SIZE + 1
 
         # Useful in later functions
         self.att_feats = None
@@ -84,10 +84,10 @@ class PureT_Fashion(BasicModel):
 
         self.encoder = Encoder(
             embed_dim=512, 
-            input_resolution=(12, 8), 
+            input_resolution=(8, 8), 
             depth=2,        #this can be played with, original value = 3 
-            num_heads=5,    #this can be played with, original value = 8
-            window_size=4,  #input sent is 768 x 12 x 8
+            num_heads=4,    #this can be played with, original value = 8
+            window_size=4,  #input sent is (8 * 8) x 768
             shift_size=3,
             mlp_ratio=4,
             dropout=0.1,
@@ -98,7 +98,7 @@ class PureT_Fashion(BasicModel):
             vocab_size = self.vocab_size, 
             embed_dim = 512, 
             depth = 2,        #this can be played with, original value = 3
-            num_heads = 5,    #this can be played with, original value = 8
+            num_heads = 4,    #this can be played with, original value = 8
             dropout = 0.1, 
             ff_dropout = 0.1,
             use_gx = use_gx
@@ -109,7 +109,7 @@ class PureT_Fashion(BasicModel):
         """Dimensions of the inputs"""
         # seq is of size B x 95
         # att_feats are directly sent from the swin backbone we trained
-        # att_feats are of size B x 768 x 12 x 8
+        # att_feats are of size B x (12 * 8) x 768
         # gv_feat is just a B x [[0]] tensor
 
         """PureT code"""
@@ -126,10 +126,14 @@ class PureT_Fashion(BasicModel):
         # att_mask for features
         #att_mask = kwargs[cfg.PARAM.ATT_FEATS_MASK]
         """the below is taken from PureT dataloader.py"""
-        att_mask = torch.ones(att_feats.size()[0], 12 * 8).cuda()
+        att_mask = torch.ones(att_feats.size()[0], 8 * 8).cuda()
         self.att_feats = att_feats
         self.att_mask = att_mask
         self.gv_feat = gv_feat
+
+        print(gv_feat.shape)
+        print(att_mask.shape)
+        print(att_feats.shape)
         # att_feats = att_feats.cuda()
         # seq = seq.cuda()
         
@@ -288,14 +292,14 @@ class PureT_Fashion(BasicModel):
         self.decoder.clear_buffer()
         return outputs, log_probs
 
-    def decode(self, **kwargs):
+    def decode(self, att_feats):
         beam_size = 5                               #kwargs['BEAM_SIZE']
         greedy_decode = True                        #kwargs['GREEDY_DECODE']
         att_feats = self.att_feats                  #kwargs[cfg.PARAM.ATT_FEATS]
         att_mask = self.att_mask                    #kwargs[cfg.PARAM.ATT_FEATS_MASK]
 
         batch_size = att_feats.size(0)
-        att_feats = self.backbone(att_feats)
+        #att_feats = self.backbone(att_feats)
         att_feats = self.att_embed(att_feats)
         gx, encoder_out = self.encoder(att_feats, att_mask)
         # p_att_feats = self.decoder.precompute(encoder_out)
