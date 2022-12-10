@@ -2,7 +2,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable
-#from lib.config import cfg
 from functools import reduce
 
 
@@ -11,7 +10,7 @@ class BasicModel(nn.Module):
         super(BasicModel, self).__init__()
         self.param_wt = None
         self.param_state = None
-        self.MODEL_SEQ_LEN = 95
+        self.MODEL_SEQ_LEN = 109
 
     def select(self, batch_size, beam_size, t, candidate_logprob):
         selected_logprob, selected_idx = torch.sort(candidate_logprob.view(batch_size, -1), -1, descending=True)
@@ -81,11 +80,11 @@ class BasicModel(nn.Module):
             state = new_state
             return beam_seq,beam_seq_logprobs,beam_logprobs_sum,state,candidates
 
-        beam_size = kwargs['BEAM_SIZE']
-        group_size = 1 #kwargs['GROUP_SIZE']
-        diversity_lambda = 0.5 #kwargs['DIVERSITY_LAMBDA']
-        constraint = False #kwargs['CONSTRAINT']
-        max_ppl = False #kwargs['MAX_PPL']
+        beam_size = 5
+        group_size = 1
+        diversity_lambda = 0.5
+        constraint = False
+        max_ppl = False
         bdash = beam_size // group_size
 
         beam_seq_table = [torch.LongTensor(self.MODEL_SEQ_LEN, bdash).zero_() for _ in range(group_size)]
@@ -145,9 +144,7 @@ class BasicModel(nn.Module):
 
                     # move the current group one step forward in time
                     wt = beam_seq_table[divm][t-divm]
-                    #kwargs[cfg.PARAM.WT] = wt.cuda()
                     self.param_wt = wt.cuda()
-                    #kwargs[cfg.PARAM.STATE] = state_table[divm]
                     self.param_state = state_table[divm]
                     logprobs_table[divm], state_table[divm] = self.get_logprobs_state(**kwargs)
 

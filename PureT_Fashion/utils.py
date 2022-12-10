@@ -5,7 +5,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable
-#from lib.config import cfg
 from torch.nn.utils.weight_norm import weight_norm
 
 def activation(act):
