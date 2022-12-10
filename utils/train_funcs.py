@@ -208,9 +208,16 @@ def fit(model, train_loader, val_loader, vocab, optimizer, criterion, epochs=5, 
                     captions = captions.to(device, non_blocking=True)
                     optimizer.zero_grad()
                     
+                    if phase != 'train':
+                        start_token = vocab['sos']
+                        captions_sos = torch.full((inputs.shape[0],1), fill_value=start_token).to(device, non_blocking=True)
+                    
                     # Set gradient calc on only for training phase
                     with torch.set_grad_enabled(phase == 'train'):
-                        outputs = model(inputs, captions, phase)
+                        if phase == 'train':
+                            outputs = model(inputs, captions, phase)
+                        else:
+                            outputs = model(inputs, captions_sos, phase)
                         loss = decoder_loss(outputs, captions, criterion, vocab)
                         preds = get_predictions(outputs, shape=(inputs.shape[0],outputs.shape[1]), device=device)
                         #loss = torch.tensor([0.])
@@ -230,12 +237,6 @@ def fit(model, train_loader, val_loader, vocab, optimizer, criterion, epochs=5, 
                         score = compute_bleu([[w2]], [w1])
                         #print('Score: ',score)
                         bleu_scores += score[0]
-                    
-#                     if itr % 50 == 0:
-#                         w1, w2 = seq2text(preds[0], captions[0], vocab)
-#                         score = compute_bleu([[w2]], [w1])
-#                         desc = '\n Pred: '+str(w1)+'\n Caption: '+str(w2)+' '+str(score)
-#                         print(desc)
                         
                     if phase == 'train':
                         writer.add_scalar("Loss/"+phase, loss.item(), epoch * len(data_loader) + itr)
@@ -253,6 +254,7 @@ def fit(model, train_loader, val_loader, vocab, optimizer, criterion, epochs=5, 
                 if phase == 'val':
                     writer.add_scalar("Loss/"+phase, epoch_loss, epoch+1)
                     writer.add_scalar("BLEU score/"+phase, epoc_bleu, epoch+1)
+                    tepoch.set_postfix(loss=epoch_loss, BLEU=epoc_bleu)
 
                 if phase == 'val':
                     val_loss_history.append(epoch_loss)
@@ -315,12 +317,7 @@ def get_predictions(outputs, shape, device):
 #Utility function to convert to sentences
 def seq2text(pred, caption, vocab):
     rev_vocab = {v: k for k, v in vocab.items()}
-    
-    #Truncate to first <eos> token
-#     for i in range(pred.shape[0]):
-#         if pred[i] == vocab['eos']:
-#             pred = pred[:i]
-#             break
+    #Truncate caption to <eos> and remove padding
     for i in range(caption.shape[0]):
         if caption[i] == vocab['eos']:
             caption = caption[:i+1]
